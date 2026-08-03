@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+ece4078_practicals.egg-info/PKG-INFO
+ece4078_practicals.egg-info/SOURCES.txt
+ece4078_practicals.egg-info/dependency_links.txt
+ece4078_practicals.egg-info/requires.txt
+ece4078_practicals.egg-info/top_level.txt

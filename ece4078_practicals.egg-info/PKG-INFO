@@ -1,0 +1,31 @@
+Metadata-Version: 2.4
+Name: ece4078-practicals
+Version: 0.1.0
+Summary: Practical notebooks and support code for ECE4078 Intelligent Robotics
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.24
+Requires-Dist: scipy>=1.10
+Requires-Dist: matplotlib>=3.7
+Requires-Dist: ipywidgets>=7.7.1
+Requires-Dist: opencv-python>=4.8
+Requires-Dist: gym>=0.26
+Requires-Dist: roboticstoolbox-python>=1.1
+Requires-Dist: spatialmath-python>=1.1
+Requires-Dist: torch>=2.2
+Requires-Dist: ipympl>=0.9.0
+Requires-Dist: ipykernel>=6.0
+
+# ECE4078/ 5178 Practicals
+This is the official repository for the practical sessions held in the Intelligent Robotics workshops. 
+
+## Instructions
+
+- In class we will work through the corresponding week's practical.
+- Some exercises are left for you to complete as take-home practice
+- You should use code from this repo to get ideas for the lab projects
+- This repo is still in development, and things are subject to change.
+
+## Installation
+
+This repository includes a `pyproject.toml` and `requirements.txt` so you can install dependencies with [uv](https://docs.astral.sh/uv/) or [pip](https://pypi.org/project/pip/).
