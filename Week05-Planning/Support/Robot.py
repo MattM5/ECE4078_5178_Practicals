@@ -23,12 +23,14 @@ class Robot(object):
 
 	def __convert_wheel_speeds__(self, left_speed, right_speed):
 		# Convert to m/s
-		left_speed_m = left_speed * self.wheels_radius
-		right_speed_m = right_speed * self.wheels_radius
+		left_speed = np.asarray(left_speed).reshape(-1)[0]
+		right_speed = np.asarray(right_speed).reshape(-1)[0]
+		left_speed_m = float(left_speed) * self.wheels_radius
+		right_speed_m = float(right_speed) * self.wheels_radius
 
 		# Compute the linear and angular velocity
-		self.linear_velocity = (left_speed_m + right_speed_m) / 2.0
-		self.angular_velocity = (right_speed_m - left_speed_m) / self.wheels_width
+		self.linear_velocity = float((left_speed_m + right_speed_m) / 2.0)
+		self.angular_velocity = float((right_speed_m - left_speed_m) / self.wheels_width)
 							   
 
 	def drive(self, measurement):
@@ -59,7 +61,7 @@ class Robot(object):
 			
 	def get_state(self):
 		"""Return the current robot state. The state is in (x,y,theta) format"""
-		return np.array([self.x, self.y, self.theta]).reshape((3,1))
+		return (self.x, self.y, self.theta)
 	
 	def set_state(self,x=0,y=0,theta=0):
 		"""Define the new model state"""
@@ -105,14 +107,14 @@ class Robot(object):
 
 		self.__convert_wheel_speeds__(drive_meas.left_speed, drive_meas.right_speed)
 
-		dt = drive_meas.dt
-		th = self.theta
-		if ang_vel == 0:
-			DFx[0,2] = -np.sin(th) * self.linear_velocity * dt
-			DFx[1,2] = np.cos(th) * self.linear_velocity * dt
+		dt = float(drive_meas.dt)
+		th = float(self.theta)
+		if abs(self.angular_velocity) < 1e-12:
+			DFx[0,2] = -np.sin(th) * float(self.linear_velocity) * dt
+			DFx[1,2] = np.cos(th) * float(self.linear_velocity) * dt
 		else:
-			DFx[0,2] = self.linear_velocity / self.angular_velocity * (np.cos(th+dt*self.angular_velocity) - np.cos(th))
-			DFx[1,2] = self.linear_velocity / self.angular_velocity * (np.sin(th+dt*self.angular_velocity) - np.sin(th))
+			DFx[0,2] = float(self.linear_velocity) / float(self.angular_velocity) * (np.cos(th+dt*float(self.angular_velocity)) - np.cos(th))
+			DFx[1,2] = float(self.linear_velocity) / float(self.angular_velocity) * (np.sin(th+dt*float(self.angular_velocity)) - np.sin(th))
 
 		self.linear_velocity = lin_vel
 		self.angular_velocity = ang_vel
@@ -123,7 +125,7 @@ class Robot(object):
 	def derivative_measure(self, markers, idx_list):
 		# Compute the derivative of the markers in the order given by idx_list w.r.t. robot and markers
 		n = 2*len(idx_list)
-		m = 3 + 2*markers.shape[1]
+		m = 3
 
 		DH = np.zeros((n,m))
 
@@ -145,8 +147,6 @@ class Robot(object):
 			DH[2*i:2*i+2,0:2] = - Rot_theta.T
 			# robot theta DH
 			DH[2*i:2*i+2, 2:3] = DRot_theta.T @ (lmj_inertial - robot_xy)
-			# lm xy DH
-			DH[2*i:2*i+2, 3+2*j:3+2*j+2] = Rot_theta.T
 			
 		return DH
 	
