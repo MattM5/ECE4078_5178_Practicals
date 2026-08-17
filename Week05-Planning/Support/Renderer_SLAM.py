@@ -1,11 +1,19 @@
 import os
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    cv2 = None
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from ipywidgets import interact, widgets, Layout, Button, Box, VBox, IntSlider
+try:
+    from IPython.display import display
+except ImportError:
+    def display(obj):
+        return None
 import threading as thrd
 import time
 
@@ -116,7 +124,7 @@ class Renderer(thrd.Thread):
         ax.add_patch(self.robot_ax[1])
 
 
-        if add_aruco:
+        if add_aruco and cv2 is not None:
             marker_files = [filename for filename in os.listdir('Support/images') if filename.startswith("M")]
             marker_world_width = 0.3
             for i,filename in enumerate(marker_files):
@@ -168,10 +176,12 @@ class Renderer(thrd.Thread):
             C = (a*d-b*c)
             lam1 = (-B+np.sqrt(B**2-4*C))/2
             lam2 = (-B-np.sqrt(B**2-4*C))/2
-            v1 = np.array([[lam1-d],[c]])
+            v1 = np.array([[lam1-d],[c]], dtype=float)
+            v1_norm = float(np.linalg.norm(v1))
+            angle_rad = np.arccos(float(v1[0,0] / v1_norm)) if v1_norm > 0 else 0.0
             self.robo_ell = Ellipse((self.state[0,0],self.state[0,1]),
-                              width=lam1, height=lam2,
-                              angle=np.rad2deg(np.arccos(v1[0]/np.linalg.norm(v1))))
+                              width=float(lam1), height=float(lam2),
+                              angle=float(np.rad2deg(angle_rad)))
             self.robo_ell.set_facecolor('none')
             self.robo_ell.set_edgecolor('blue')
             ax.add_patch(self.robo_ell)
@@ -252,18 +262,31 @@ class Renderer(thrd.Thread):
             for i in range(len(self.marker_lines)):
                 self.marker_lines[i].set_visible(False)
                 self.marker_lables[i].set_visible(False)
-            marker_pos_all = np.zeros((len(self.measurements[self.cur_frame]),2))
-            for i in range(len(self.measurements[self.cur_frame])):
-                mes = self.measurements[self.cur_frame][i]
+            frame_measurements = self.measurements[self.cur_frame]
+            marker_pos_all = np.zeros((len(frame_measurements),2))
+            valid_count = 0
+            for i in range(len(frame_measurements)):
+                mes = frame_measurements[i]
+                tag = int(mes.tag)
+                if tag < 0 or tag >= len(self.marker_lines):
+                    continue
                 marker_pos = Rot_0_rob.dot(mes.position.reshape(-1,1)) + robot_xy
-                marker_pos_all[i,0] = marker_pos[0]
-                marker_pos_all[i,1] = marker_pos[1]
-                self.marker_lines[mes.tag].set_data([robot_xy[0],marker_pos[0]],[robot_xy[1],marker_pos[1]])
-                self.marker_lines[mes.tag].set_visible(True)
-                self.marker_lables[mes.tag].set_x(marker_pos[0])
-                self.marker_lables[mes.tag].set_y(marker_pos[1])
-                self.marker_lables[mes.tag].set_visible(True)
-            self.marker_scatter.set_offsets(marker_pos_all)
+                marker_x = float(marker_pos[0,0])
+                marker_y = float(marker_pos[1,0])
+                robot_x = float(robot_xy[0,0])
+                robot_y = float(robot_xy[1,0])
+                marker_pos_all[valid_count,0] = marker_x
+                marker_pos_all[valid_count,1] = marker_y
+                self.marker_lines[tag].set_data([robot_x, marker_x],[robot_y, marker_y])
+                self.marker_lines[tag].set_visible(True)
+                self.marker_lables[tag].set_x(marker_x)
+                self.marker_lables[tag].set_y(marker_y)
+                self.marker_lables[tag].set_visible(True)
+                valid_count += 1
+            if valid_count > 0:
+                self.marker_scatter.set_offsets(marker_pos_all[:valid_count])
+            else:
+                self.marker_scatter.set_offsets(np.empty((0,2)))
         
         #Render Landmarks
         if self.landmarks is not None:
@@ -274,18 +297,28 @@ class Renderer(thrd.Thread):
             x_values = []
             y_values = []
             for i in range(self.cur_frame):
-                true_values = np.array([self.aruco_markers[m.tag] for m in self.measurements[i]]).reshape((len(self.measurements[i]), 2)).T
+                valid_true = []
+                for m in self.measurements[i]:
+                    tag = int(getattr(m, 'tag', -1))
+                    if tag in self.aruco_markers:
+                        valid_true.append(self.aruco_markers[tag])
+                if not valid_true:
+                    continue
+                true_values = np.asarray(valid_true, dtype=float).reshape((-1, 2)).T
                 predicted_values = self.landmarks[i]
 
-                end_idx = np.min([true_values.shape[1], predicted_values.shape[1]])
+                end_idx = min(true_values.shape[1], predicted_values.shape[1])
+                if end_idx <= 0:
+                    continue
                 x_error = np.mean(true_values[0,:end_idx] - predicted_values[0,:end_idx])
-                y_error = np.mean(true_values[1,:end_idx] - predicted_values[1,:end_idx])           
+                y_error = np.mean(true_values[1,:end_idx] - predicted_values[1,:end_idx])
 
                 x_values.append(x_error)
                 y_values.append(y_error)
 
-            self.marker_x_error.set_data(np.arange(len(x_values)), x_values)
-            self.marker_y_error.set_data(np.arange(len(y_values)), y_values)
+            if x_values:
+                self.marker_x_error.set_data(np.arange(len(x_values)), x_values)
+                self.marker_y_error.set_data(np.arange(len(y_values)), y_values)
         
         #Render Robot Covariance Ellipse
         if self.robot_cov is not None:
@@ -298,10 +331,12 @@ class Renderer(thrd.Thread):
             C = (a*d-b*c)
             lam1 = (-B+np.sqrt(B**2-4*C))/2
             lam2 = (-B-np.sqrt(B**2-4*C))/2
-            v1 = np.array([[lam1-d],[c]])
-            self.robo_ell.width = lam1
-            self.robo_ell.height = lam2
-            self.robo_ell.angle = np.rad2deg(np.arccos(v1[0]/np.linalg.norm(v1)))
+            v1 = np.array([[lam1-d],[c]], dtype=float)
+            v1_norm = float(np.linalg.norm(v1))
+            angle_rad = np.arccos(float(v1[0,0] / v1_norm)) if v1_norm > 0 else 0.0
+            self.robo_ell.width = float(lam1)
+            self.robo_ell.height = float(lam2)
+            self.robo_ell.angle = float(np.rad2deg(angle_rad))
             self.robo_ell.set_center((self.state[self.cur_frame,0],self.state[self.cur_frame,1]))
         if self.marker_cov is not None:
             for i in range(self.landmarks[self.cur_frame].shape[1]):
@@ -315,10 +350,12 @@ class Renderer(thrd.Thread):
                 C = (a*d-b*c)
                 lam1 = (-B+np.sqrt(B**2-4*C))/2
                 lam2 = (-B-np.sqrt(B**2-4*C))/2
-                v1 = np.array([[lam1-d],[c]])
-                self.marker_ells[i].width=lam1
-                self.marker_ells[i].height=lam2
-                self.marker_ells[i].angle = np.rad2deg(np.arccos(v1[0]/np.linalg.norm(v1)))
+                v1 = np.array([[lam1-d],[c]], dtype=float)
+                v1_norm = float(np.linalg.norm(v1))
+                angle_rad = np.arccos(float(v1[0,0] / v1_norm)) if v1_norm > 0 else 0.0
+                self.marker_ells[i].width = float(lam1)
+                self.marker_ells[i].height = float(lam2)
+                self.marker_ells[i].angle = float(np.rad2deg(angle_rad))
             
         self.lock.release()
         
